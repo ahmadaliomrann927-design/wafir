@@ -18,9 +18,10 @@ main{padding:10px 16px}
 .hero{background:linear-gradient(135deg,#2a2410,#1a1d24);border:1px solid #3a3215}
 .label{color:var(--mut);font-size:13px;margin-bottom:6px}
 .big{font-size:44px;font-weight:700;color:var(--acc)}
+.big2{font-size:30px;font-weight:700;color:var(--acc)}
 .mid{font-size:26px;font-weight:700;color:var(--acc2)}
 small{font-size:13px;color:var(--mut);font-weight:400}
-.sub{color:var(--mut);font-size:12px;margin-top:6px}
+.sub{color:var(--mut);font-size:12px;margin-top:6px;line-height:1.7}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .grid .card{margin:0}
 h2{font-size:17px;margin-bottom:12px}
@@ -54,6 +55,13 @@ nav button.on{color:var(--acc)}
 .dev .pct{font-size:13px;color:var(--acc);font-weight:700}
 .warn{color:var(--red)}
 .okc{color:var(--acc2)}
+.tip{display:flex;gap:10px;padding:12px 0;border-bottom:1px solid #262b36}
+.tip:last-child{border-bottom:0}
+.tip .ic{font-size:20px;line-height:1.3}
+.tip .tt{font-size:15px;font-weight:700}
+.tip .tx{font-size:13px;color:var(--mut);margin-top:3px;line-height:1.7}
+.tip .tx.warn{color:var(--red)}
+.tip .tx.okc{color:var(--acc2)}
 </style>
 </head>
 <body>
@@ -72,6 +80,13 @@ nav button.on{color:var(--acc)}
       <div class="mid"><span id="avg">--</span> <small>كيلوواط ساعة / يوم</small></div>
       <div class="bar"><div id="coverBar"></div></div>
       <div class="sub" id="coverTxt">سجّل قراءتين على الأقل لنحسب استهلاكك</div>
+    </div>
+
+    <div class="card">
+      <div class="label">الهدف الشهري</div>
+      <div class="mid"><span id="goalVal">--</span> <small>kWh</small></div>
+      <div class="bar"><div id="goalBar"></div></div>
+      <div class="sub" id="goalTxt"></div>
     </div>
 
     <div class="card">
@@ -137,6 +152,17 @@ nav button.on{color:var(--acc)}
     </div>
   </section>
 
+  <section id="tips" class="tab">
+    <div class="card hero">
+      <div class="label">أفضل وقت لتشغيل الأجهزة الثقيلة</div>
+      <div class="big2" id="tWin">--</div>
+      <div class="sub" id="tWinTxt"></div>
+    </div>
+    <div class="card"><h2>توازن الطاقة</h2><div id="tBal"></div></div>
+    <div class="card"><h2>توصيات أجهزتك</h2><div id="tDev"></div></div>
+    <div class="card"><h2>وفّر أكتر</h2><div id="tSave"></div></div>
+  </section>
+
   <section id="settings" class="tab">
     <div class="card">
       <h2>النظام الشمسي</h2>
@@ -145,8 +171,9 @@ nav button.on{color:var(--acc)}
       <label>سعة البطارية (kWh) <input id="s_bat" type="number" step="0.1" min="0"></label>
       <label>قدرة الإنفرتر (واط) <input id="s_inv" type="number" min="0"></label>
       <label>ساعات الشمس الفعالة يومياً <input id="s_sun" type="number" step="0.1" min="0"></label>
-      <h2 style="margin-top:8px">التعرفة</h2>
+      <h2 style="margin-top:8px">التعرفة والهدف</h2>
       <label>سعر الكيلوواط ساعة (ل.س) <input id="s_price" type="number" step="any" min="0" inputmode="decimal"></label>
+      <label>هدف الاستهلاك الشهري (kWh) <input id="s_goal" type="number" step="any" min="0" inputmode="decimal"></label>
       <button class="btn" id="save">حفظ</button>
     </div>
   </section>
@@ -156,14 +183,16 @@ nav button.on{color:var(--acc)}
   <button data-tab="home" class="on">🏠<span>الرئيسية</span></button>
   <button data-tab="readings">📅<span>القراءات</span></button>
   <button data-tab="devices">🔌<span>الأجهزة</span></button>
+  <button data-tab="tips">💡<span>نصائح</span></button>
   <button data-tab="settings">⚙️<span>الإعدادات</span></button>
 </nav>
 
 <script>
-const DEFAULTS = { panels: 4, panelW: 550, bat: 5, inv: 3500, sun: 4, price: 0 };
+const DEFAULTS = { panels: 4, panelW: 550, bat: 5, inv: 3500, sun: 4, price: 0, goal: 0 };
 const SKEY = "wafir_settings";
 const RKEY = "wafir_readings";
 const DKEY = "wafir_devices";
+const SOLAR_NOON = 12.3; // منتصف الذروة الشمسية تقريباً بتوقيت دمشق
 const PRESETS = [
   { n: "براد", w: 150, h: 10 },
   { n: "غسالة", w: 500, h: 1 },
@@ -177,6 +206,16 @@ const PRESETS = [
   { n: "مضخة ماء", w: 750, h: 1 },
   { n: "لابتوب", w: 60, h: 5 },
   { n: "ميكروويف", w: 1200, h: 0.3 }
+];
+const TIPS = [
+  { k: "سخان", t: "ركّب مؤقّت (تايمر) وشغّله وقت الشمس فقط، وخفّض حرارته لحوالي 55 درجة." },
+  { k: "مكيف", t: "ثبّت الحرارة على 24 إلى 25 درجة ونظّف الفلتر كل شهر." },
+  { k: "براد", t: "لا تفتح الباب كتير، واترك مسافة خلفه للتهوية ونظّف الملف الخلفي." },
+  { k: "مكواة", t: "اكوِ كمية كبيرة دفعة وحدة وقت الشمس بدل ما تشغّلها كل يوم." },
+  { k: "غسالة", t: "شغّلها مليانة وبماء بارد وقت الظهر." },
+  { k: "مضخة", t: "عبّي الخزان وقت الشمس بدل الليل." },
+  { k: "إضاءة", t: "استبدل اللمبات القديمة بـ LED واطفئ اللي ما بتحتاجه." },
+  { k: "ميكروويف", t: "استخدمه للتسخين السريع بدل الفرن الكهربائي." }
 ];
 const $ = id => document.getElementById(id);
 const f = (n, d = 1) => (+n).toFixed(d);
@@ -213,6 +252,13 @@ function computeIntervals() {
   });
 }
 
+function meterAvg() {
+  const valid = computeIntervals().filter(x => x.delta !== null && x.delta >= 0);
+  const totalDelta = valid.reduce((a, x) => a + x.delta, 0);
+  const totalDays = valid.reduce((a, x) => a + x.days, 0);
+  return totalDays > 0 ? totalDelta / totalDays : null;
+}
+
 function devicesStats() {
   const s = loadSettings();
   const list = loadArr(DKEY).map(d => {
@@ -225,10 +271,27 @@ function devicesStats() {
   return { s, list, totalDaily, totalLoad };
 }
 
+function monthEstimate() {
+  const avg = meterAvg();
+  if (avg !== null) return { v: avg * 30, src: "قراءات العداد" };
+  const ds = devicesStats();
+  if (ds.list.length) return { v: ds.totalDaily * 30, src: "أجهزتك" };
+  return null;
+}
+
+function genDaily(s) { return (s.panels * s.panelW * s.sun * 0.8) / 1000; }
+
+function pad(n) { return n < 10 ? "0" + n : "" + n; }
+function hhmm(x) {
+  const r = Math.round(x * 2) / 2;
+  const h = Math.floor(r);
+  return pad(h) + ":" + (r - h > 0 ? "30" : "00");
+}
+
 function renderHome() {
   const s = loadSettings();
   const pv = s.panels * s.panelW;
-  const gen = (pv * s.sun * 0.8) / 1000;
+  const gen = genDaily(s);
   const hours = (s.bat * 0.8 * 1000) / 500;
 
   $("gen").textContent = f(gen);
@@ -237,12 +300,8 @@ function renderHome() {
   $("inv").textContent = s.inv;
   $("pv").textContent = pv;
 
-  const valid = computeIntervals().filter(x => x.delta !== null && x.delta >= 0);
-  const totalDelta = valid.reduce((a, x) => a + x.delta, 0);
-  const totalDays = valid.reduce((a, x) => a + x.days, 0);
-
-  if (totalDays > 0) {
-    const avg = totalDelta / totalDays;
+  const avg = meterAvg();
+  if (avg !== null) {
     const month = avg * 30;
     $("avg").textContent = f(avg, 2);
     $("month").textContent = f(month, 0);
@@ -268,6 +327,41 @@ function renderHome() {
   } else {
     $("devDaily").textContent = "--";
     $("devTxt").textContent = "أضف أجهزتك من تبويب الأجهزة";
+  }
+
+  renderGoal();
+}
+
+function renderGoal() {
+  const s = loadSettings();
+  const est = monthEstimate();
+  const bar = $("goalBar"), tx = $("goalTxt");
+  if (!(s.goal > 0)) {
+    $("goalVal").textContent = "--";
+    bar.style.width = "0";
+    tx.className = "sub";
+    tx.textContent = "حدد هدفك الشهري من الإعدادات";
+    return;
+  }
+  $("goalVal").textContent = f(s.goal, 0);
+  if (!est) {
+    bar.style.width = "0";
+    tx.className = "sub";
+    tx.textContent = "سجّل قراءات أو أضف أجهزة لنقارن استهلاكك بالهدف";
+    return;
+  }
+  const p = est.v / s.goal * 100;
+  bar.style.width = Math.min(p, 100) + "%";
+  bar.style.background = p > 100 ? "var(--red)" : (p > 90 ? "var(--acc)" : "var(--acc2)");
+  if (p > 100) {
+    tx.className = "sub warn";
+    tx.textContent = "تنبيه: استهلاكك المتوقع (" + f(est.v, 0) + " kWh حسب " + est.src + ") أعلى من هدفك بـ " + f(est.v - s.goal, 0) + " kWh";
+  } else if (p > 90) {
+    tx.className = "sub";
+    tx.textContent = "قربت من الهدف: " + f(est.v, 0) + " kWh من أصل " + f(s.goal, 0) + " (حسب " + est.src + ")";
+  } else {
+    tx.className = "sub okc";
+    tx.textContent = "ممتاز ✅ استهلاكك المتوقع " + f(est.v, 0) + " kWh (حسب " + est.src + ") ضمن الهدف";
   }
 }
 
@@ -371,6 +465,116 @@ function renderDevices() {
   });
 }
 
+function tip(box, icon, title, text, cls) {
+  const el = document.createElement("div");
+  el.className = "tip";
+  const ic = document.createElement("div");
+  ic.className = "ic";
+  ic.textContent = icon;
+  const body = document.createElement("div");
+  const tt = document.createElement("div");
+  tt.className = "tt";
+  tt.textContent = title;
+  const tx = document.createElement("div");
+  tx.className = "tx" + (cls ? " " + cls : "");
+  tx.textContent = text;
+  body.appendChild(tt);
+  body.appendChild(tx);
+  el.appendChild(ic);
+  el.appendChild(body);
+  box.appendChild(el);
+}
+
+function renderTips() {
+  const ds = devicesStats();
+  const s = ds.s;
+  const gen = genDaily(s);
+  const solarW = s.panels * s.panelW * 0.8;
+
+  // نافذة الذروة
+  const half = Math.min(s.sun, 10) / 2;
+  const a = SOLAR_NOON - half, b = SOLAR_NOON + half;
+  $("tWin").textContent = s.sun > 0 ? "من " + hhmm(a) + " إلى " + hhmm(b) : "--";
+  $("tWinTxt").textContent = s.sun > 0
+    ? "خلال هالفترة ألواحك بتعطي حتى حوالي " + Math.round(solarW) + " واط (القيمة تقريبية وبتتأثر بالغيوم). شغّل الأجهزة الثقيلة وقتها، وخلّي الليل للأجهزة الخفيفة."
+    : "حدد ساعات الشمس من الإعدادات";
+
+  // توازن الطاقة
+  const bal = $("tBal");
+  bal.innerHTML = "";
+  if (!ds.list.length) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.textContent = "أضف أجهزتك من تبويب الأجهزة لنحسب التوازن";
+    bal.appendChild(e);
+  } else {
+    if (gen >= ds.totalDaily) {
+      tip(bal, "☀️", "ألواحك بتغطي أجهزتك", "التوليد المتوقع " + f(gen, 1) + " kWh مقابل استهلاك " + f(ds.totalDaily, 2) + " kWh باليوم، بفائض حوالي " + f(gen - ds.totalDaily, 1) + " kWh.", "okc");
+    } else {
+      tip(bal, "⚠️", "في عجز بالطاقة", "التوليد المتوقع " + f(gen, 1) + " kWh أقل من استهلاك أجهزتك " + f(ds.totalDaily, 2) + " kWh باليوم. الفرق (" + f(ds.totalDaily - gen, 1) + " kWh) لازم يجي من الكهرباء النظامية أو الأمبيرات، أو تقلّل الاستهلاك.", "warn");
+    }
+    const avgLoad = ds.totalDaily * 1000 / 24;
+    if (avgLoad > 0 && s.bat > 0) {
+      const hrs = s.bat * 0.8 * 1000 / avgLoad;
+      tip(bal, "🔋", "عمر البطارية", "على متوسط حمل أجهزتك (" + Math.round(avgLoad) + " واط) بتكفي بطاريتك حوالي " + f(hrs, 1) + " ساعة (باعتبار 80% قابلة للاستخدام).", "");
+    }
+  }
+
+  // توصيات الأجهزة الثقيلة
+  const dv = $("tDev");
+  dv.innerHTML = "";
+  const heavy = ds.list.filter(d => d.w >= 500);
+  if (!ds.list.length) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.textContent = "ما في أجهزة مسجّلة بعد";
+    dv.appendChild(e);
+  } else if (!heavy.length) {
+    tip(dv, "✅", "ما عندك أجهزة ثقيلة", "كل أجهزتك أقل من 500 واط، فما في وقت مخصص لازم تلتزم فيه.", "okc");
+  } else {
+    heavy.forEach(d => {
+      const name = d.n + (d.q > 1 ? " × " + d.q : "");
+      if (s.inv > 0 && d.load > s.inv) {
+        tip(dv, "⛔", name, "حمله (" + d.load + " واط) أكبر من قدرة الإنفرتر (" + s.inv + " واط)، ما رح يشتغل على النظام الشمسي.", "warn");
+      } else if (d.load > solarW) {
+        tip(dv, "🔌", name, "حمله (" + d.load + " واط) أكبر من إنتاج الألواح الآني (" + Math.round(solarW) + " واط)، فالفرق بيسحب من البطارية. شغّله بوقت الذروة (" + hhmm(a) + " إلى " + hhmm(b) + ") ومن دون أجهزة ثقيلة ثانية.", "warn");
+      } else {
+        tip(dv, "☀️", name, "شغّله بين " + hhmm(a) + " و " + hhmm(b) + "، وقتها ألواحك بتغطيه بالكامل (" + d.load + " واط من أصل " + Math.round(solarW) + ").", "okc");
+      }
+    });
+    if (heavy.length > 1) {
+      const sum = heavy.reduce((x, d) => x + d.load, 0);
+      if (sum > solarW) {
+        tip(dv, "🚦", "شغّلها بالدور", "مجموع الأجهزة الثقيلة مع بعض (" + sum + " واط) أكبر من إنتاج الألواح (" + Math.round(solarW) + " واط). شغّل جهاز واحد بالمرة.", "warn");
+      }
+    }
+  }
+
+  // وفّر أكتر
+  const sv = $("tSave");
+  sv.innerHTML = "";
+  if (!ds.list.length) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.textContent = "أضف أجهزتك لنعطيك نصائح مخصصة";
+    sv.appendChild(e);
+  } else {
+    ds.list.slice(0, 3).forEach(d => {
+      const full = d.h >= 1;
+      const r = full ? 1 : d.h / 2;
+      const kwh = d.w * d.q * r / 1000 * 30;
+      let txt = "";
+      const m = TIPS.find(t => d.n.indexOf(t.k) !== -1);
+      if (m) txt += m.t + " ";
+      txt += (full ? "تقليل ساعة واحدة يومياً" : "تقليل نصف مدة التشغيل") + " بيوفر حوالي " + f(kwh, 1) + " kWh بالشهر";
+      if (s.price > 0) txt += " (" + Math.round(kwh * s.price).toLocaleString("ar-SY") + " ل.س)";
+      txt += ".";
+      tip(sv, "💡", d.n + " (" + f(d.daily, 2) + " kWh باليوم)", txt, "");
+    });
+  }
+  tip(sv, "🌙", "قاعدة ذهبية", "الأحمال الثقيلة وقت الشمس، وبالليل اعتمد على الأجهزة الخفيفة (إضاءة، راوتر، براد) حتى ما تفرغ البطارية.", "");
+}
+
 function renderSettings() {
   const s = loadSettings();
   $("s_panels").value = s.panels;
@@ -379,11 +583,11 @@ function renderSettings() {
   $("s_inv").value = s.inv;
   $("s_sun").value = s.sun;
   $("s_price").value = s.price;
+  $("s_goal").value = s.goal;
 }
 
-function renderAll() { renderHome(); renderList(); renderDevices(); renderSettings(); }
+function renderAll() { renderHome(); renderList(); renderDevices(); renderTips(); renderSettings(); }
 
-// الأزرار الجاهزة
 PRESETS.forEach(p => {
   const b = document.createElement("button");
   b.className = "chip";
@@ -406,7 +610,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
 
 $("save").onclick = () => {
   const v = id => parseFloat($(id).value) || 0;
-  saveSettings({ panels: v("s_panels"), panelW: v("s_panelW"), bat: v("s_bat"), inv: v("s_inv"), sun: v("s_sun"), price: v("s_price") });
+  saveSettings({ panels: v("s_panels"), panelW: v("s_panelW"), bat: v("s_bat"), inv: v("s_inv"), sun: v("s_sun"), price: v("s_price"), goal: v("s_goal") });
   renderAll();
   document.querySelector('nav [data-tab="home"]').click();
 };
