@@ -99,6 +99,7 @@ nav button.on{color:var(--acc)}
       <div class="card"><div class="label">تقدير الشهر</div><div class="mid"><span id="month">--</span> <small>kWh</small></div></div>
       <div class="card"><div class="label">التكلفة التقديرية</div><div class="mid"><span id="cost">--</span> <small>ل.س</small></div></div>
     </div>
+    <div class="card"><div class="label">الشرائح</div><div class="sub" id="costNote" style="margin-top:0">سجّل قراءات أو أضف أجهزة لنحسب التكلفة</div></div>
 
     <div class="grid">
       <div class="card"><div class="label">سعة البطارية</div><div class="mid"><span id="bat">0</span> <small>kWh</small></div></div>
@@ -171,8 +172,11 @@ nav button.on{color:var(--acc)}
       <label>سعة البطارية (kWh) <input id="s_bat" type="number" step="0.1" min="0"></label>
       <label>قدرة الإنفرتر (واط) <input id="s_inv" type="number" min="0"></label>
       <label>ساعات الشمس الفعالة يومياً <input id="s_sun" type="number" step="0.1" min="0"></label>
-      <h2 style="margin-top:8px">التعرفة والهدف</h2>
-      <label>سعر الكيلوواط ساعة (ل.س) <input id="s_price" type="number" step="any" min="0" inputmode="decimal"></label>
+      <h2 style="margin-top:8px">التعرفة (بالشرائح)</h2>
+      <label>سعر الكيلوواط ساعة ضمن الشريحة الأولى (ل.س) <input id="s_p1" type="number" step="any" min="0" inputmode="decimal"></label>
+      <label>حد الشريحة الأولى (kWh بالشهر) <input id="s_tier" type="number" step="any" min="0" inputmode="decimal"></label>
+      <label>سعر الكيلوواط ساعة فوق الحد (ل.س) <input id="s_p2" type="number" step="any" min="0" inputmode="decimal"></label>
+      <h2 style="margin-top:8px">الهدف</h2>
       <label>هدف الاستهلاك الشهري (kWh) <input id="s_goal" type="number" step="any" min="0" inputmode="decimal"></label>
       <button class="btn" id="save">حفظ</button>
     </div>
@@ -188,7 +192,7 @@ nav button.on{color:var(--acc)}
 </nav>
 
 <script>
-const DEFAULTS = { panels: 4, panelW: 550, bat: 5, inv: 3500, sun: 4, price: 0, goal: 0 };
+const DEFAULTS = { panels: 4, panelW: 550, bat: 5, inv: 3500, sun: 4, p1: 6, tier: 300, p2: 16, goal: 0 };
 const SKEY = "wafir_settings";
 const RKEY = "wafir_readings";
 const DKEY = "wafir_devices";
@@ -219,6 +223,7 @@ const TIPS = [
 ];
 const $ = id => document.getElementById(id);
 const f = (n, d = 1) => (+n).toFixed(d);
+const money = n => Math.round(n).toLocaleString("ar-SY");
 
 function loadSettings() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SKEY) || "{}") }; }
@@ -233,6 +238,15 @@ function loadArr(key) {
   } catch { return []; }
 }
 function saveArr(key, r) { try { localStorage.setItem(key, JSON.stringify(r)); } catch {} }
+
+// حساب التكلفة بالشرائح: الشريحة الأولى بسعر p1 والزيادة فقط بسعر p2
+function costOf(kwh) {
+  const s = loadSettings();
+  const k = Math.max(kwh, 0);
+  const first = Math.min(k, s.tier);
+  const extra = Math.max(k - s.tier, 0);
+  return first * s.p1 + extra * s.p2;
+}
 
 function todayStr() { return new Date().toLocaleDateString("en-CA"); }
 
@@ -302,10 +316,7 @@ function renderHome() {
 
   const avg = meterAvg();
   if (avg !== null) {
-    const month = avg * 30;
     $("avg").textContent = f(avg, 2);
-    $("month").textContent = f(month, 0);
-    $("cost").textContent = s.price > 0 ? Math.round(month * s.price).toLocaleString("ar-SY") : "--";
     const cover = avg > 0 ? Math.min(gen / avg * 100, 100) : 100;
     $("coverBar").style.width = cover + "%";
     $("coverTxt").textContent = avg > 0
@@ -313,10 +324,29 @@ function renderHome() {
       : "لا يوجد استهلاك مسجّل";
   } else {
     $("avg").textContent = "--";
-    $("month").textContent = "--";
-    $("cost").textContent = "--";
     $("coverBar").style.width = "0";
     $("coverTxt").textContent = "سجّل قراءتين على الأقل لنحسب استهلاكك";
+  }
+
+  const est = monthEstimate();
+  const note = $("costNote");
+  if (est) {
+    $("month").textContent = f(est.v, 0);
+    $("cost").textContent = money(costOf(est.v));
+    if (est.v > s.tier) {
+      note.className = "sub warn";
+      note.style.marginTop = "0";
+      note.textContent = "تجاوزت شريحة الـ " + s.tier + " kWh بحوالي " + f(est.v - s.tier, 0) + " kWh، وهاد الجزء بيتحاسب بـ " + s.p2 + " ل.س للكيلوواط بدل " + s.p1 + " (حسب " + est.src + ").";
+    } else {
+      note.className = "sub okc";
+      note.style.marginTop = "0";
+      note.textContent = "باقي لك حوالي " + f(s.tier - est.v, 0) + " kWh قبل ما تدخل شريحة الـ " + s.p2 + " ل.س (حسب " + est.src + ").";
+    }
+  } else {
+    $("month").textContent = "--";
+    $("cost").textContent = "--";
+    note.className = "sub";
+    note.textContent = "سجّل قراءات أو أضف أجهزة لنحسب التكلفة";
   }
 
   const ds = devicesStats();
@@ -397,9 +427,12 @@ function renderDevices() {
   const box = $("devList");
   box.innerHTML = "";
 
+  const monthKwh = ds.totalDaily * 30;
+  const monthCost = costOf(monthKwh);
+
   $("sd").textContent = f(ds.totalDaily, 2);
-  $("sm").textContent = f(ds.totalDaily * 30, 0);
-  $("sc").textContent = s.price > 0 ? Math.round(ds.totalDaily * 30 * s.price).toLocaleString("ar-SY") : "--";
+  $("sm").textContent = f(monthKwh, 0);
+  $("sc").textContent = ds.list.length ? money(monthCost) : "--";
   $("sl").textContent = Math.round(ds.totalLoad);
 
   const lt = $("loadTxt");
@@ -433,9 +466,8 @@ function renderDevices() {
     const meta = document.createElement("div");
     meta.className = "meta";
     const share = ds.totalDaily > 0 ? (d.daily / ds.totalDaily * 100) : 0;
-    let costTxt = "";
-    if (s.price > 0) costTxt = " | " + Math.round(d.daily * 30 * s.price).toLocaleString("ar-SY") + " ل.س/شهر";
-    meta.textContent = d.w + " واط × " + d.h + " ساعة = " + f(d.daily, 2) + " kWh/يوم" + costTxt;
+    const devCost = monthCost * share / 100; // حصة الجهاز من الفاتورة
+    meta.textContent = d.w + " واط × " + d.h + " ساعة = " + f(d.daily, 2) + " kWh/يوم | " + money(devCost) + " ل.س/شهر";
     left.appendChild(nm);
     left.appendChild(meta);
 
@@ -491,7 +523,6 @@ function renderTips() {
   const gen = genDaily(s);
   const solarW = s.panels * s.panelW * 0.8;
 
-  // نافذة الذروة
   const half = Math.min(s.sun, 10) / 2;
   const a = SOLAR_NOON - half, b = SOLAR_NOON + half;
   $("tWin").textContent = s.sun > 0 ? "من " + hhmm(a) + " إلى " + hhmm(b) : "--";
@@ -499,7 +530,6 @@ function renderTips() {
     ? "خلال هالفترة ألواحك بتعطي حتى حوالي " + Math.round(solarW) + " واط (القيمة تقريبية وبتتأثر بالغيوم). شغّل الأجهزة الثقيلة وقتها، وخلّي الليل للأجهزة الخفيفة."
     : "حدد ساعات الشمس من الإعدادات";
 
-  // توازن الطاقة
   const bal = $("tBal");
   bal.innerHTML = "";
   if (!ds.list.length) {
@@ -520,7 +550,6 @@ function renderTips() {
     }
   }
 
-  // توصيات الأجهزة الثقيلة
   const dv = $("tDev");
   dv.innerHTML = "";
   const heavy = ds.list.filter(d => d.w >= 500);
@@ -550,7 +579,6 @@ function renderTips() {
     }
   }
 
-  // وفّر أكتر
   const sv = $("tSave");
   sv.innerHTML = "";
   if (!ds.list.length) {
@@ -559,18 +587,22 @@ function renderTips() {
     e.textContent = "أضف أجهزتك لنعطيك نصائح مخصصة";
     sv.appendChild(e);
   } else {
+    const est = monthEstimate();
+    const base = est ? est.v : ds.totalDaily * 30;
     ds.list.slice(0, 3).forEach(d => {
       const full = d.h >= 1;
       const r = full ? 1 : d.h / 2;
       const kwh = d.w * d.q * r / 1000 * 30;
+      const saved = costOf(base) - costOf(base - kwh); // التوفير حسب الشريحة
       let txt = "";
       const m = TIPS.find(t => d.n.indexOf(t.k) !== -1);
       if (m) txt += m.t + " ";
-      txt += (full ? "تقليل ساعة واحدة يومياً" : "تقليل نصف مدة التشغيل") + " بيوفر حوالي " + f(kwh, 1) + " kWh بالشهر";
-      if (s.price > 0) txt += " (" + Math.round(kwh * s.price).toLocaleString("ar-SY") + " ل.س)";
-      txt += ".";
+      txt += (full ? "تقليل ساعة واحدة يومياً" : "تقليل نصف مدة التشغيل") + " بيوفر حوالي " + f(kwh, 1) + " kWh بالشهر (" + money(saved) + " ل.س).";
       tip(sv, "💡", d.n + " (" + f(d.daily, 2) + " kWh باليوم)", txt, "");
     });
+    if (base > s.tier) {
+      tip(sv, "🎯", "انزل تحت الشريحة", "استهلاكك المتوقع (" + f(base, 0) + " kWh) فوق حد الـ " + s.tier + ". كل كيلوواط بتوفره من الزيادة بيوفر " + s.p2 + " ل.س، وهو أغلى من الشريحة الأولى (" + s.p1 + " ل.س).", "warn");
+    }
   }
   tip(sv, "🌙", "قاعدة ذهبية", "الأحمال الثقيلة وقت الشمس، وبالليل اعتمد على الأجهزة الخفيفة (إضاءة، راوتر، براد) حتى ما تفرغ البطارية.", "");
 }
@@ -582,7 +614,9 @@ function renderSettings() {
   $("s_bat").value = s.bat;
   $("s_inv").value = s.inv;
   $("s_sun").value = s.sun;
-  $("s_price").value = s.price;
+  $("s_p1").value = s.p1;
+  $("s_tier").value = s.tier;
+  $("s_p2").value = s.p2;
   $("s_goal").value = s.goal;
 }
 
@@ -610,7 +644,10 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
 
 $("save").onclick = () => {
   const v = id => parseFloat($(id).value) || 0;
-  saveSettings({ panels: v("s_panels"), panelW: v("s_panelW"), bat: v("s_bat"), inv: v("s_inv"), sun: v("s_sun"), price: v("s_price"), goal: v("s_goal") });
+  saveSettings({
+    panels: v("s_panels"), panelW: v("s_panelW"), bat: v("s_bat"), inv: v("s_inv"), sun: v("s_sun"),
+    p1: v("s_p1"), tier: v("s_tier"), p2: v("s_p2"), goal: v("s_goal")
+  });
   renderAll();
   document.querySelector('nav [data-tab="home"]').click();
 };
