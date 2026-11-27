@@ -41,6 +41,19 @@ nav button.on{color:var(--acc)}
 .empty{color:var(--mut);font-size:14px;text-align:center;padding:14px 0}
 .bar{height:10px;border-radius:6px;background:#262b36;overflow:hidden;margin-top:10px}
 .bar>div{height:100%;background:var(--acc2);width:0}
+.bar.sm{height:6px;margin-top:8px}
+.bar.sm>div{background:var(--acc)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.chip{background:#262b36;border:0;color:var(--text);padding:8px 12px;border-radius:20px;font-size:13px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dev{padding:12px 0;border-bottom:1px solid #262b36}
+.dev:last-child{border-bottom:0}
+.dev .top{display:flex;justify-content:space-between;align-items:center}
+.dev .nm{font-size:16px;font-weight:700}
+.dev .meta{font-size:12px;color:var(--mut);margin-top:3px}
+.dev .pct{font-size:13px;color:var(--acc);font-weight:700}
+.warn{color:var(--red)}
+.okc{color:var(--acc2)}
 </style>
 </head>
 <body>
@@ -55,10 +68,16 @@ nav button.on{color:var(--acc)}
     </div>
 
     <div class="card">
-      <div class="label">متوسط استهلاكك اليومي</div>
+      <div class="label">متوسط استهلاكك اليومي (من العداد)</div>
       <div class="mid"><span id="avg">--</span> <small>كيلوواط ساعة / يوم</small></div>
       <div class="bar"><div id="coverBar"></div></div>
       <div class="sub" id="coverTxt">سجّل قراءتين على الأقل لنحسب استهلاكك</div>
+    </div>
+
+    <div class="card">
+      <div class="label">استهلاك أجهزتك المسجّلة</div>
+      <div class="mid"><span id="devDaily">--</span> <small>كيلوواط ساعة / يوم</small></div>
+      <div class="sub" id="devTxt">أضف أجهزتك من تبويب الأجهزة</div>
     </div>
 
     <div class="grid">
@@ -87,7 +106,36 @@ nav button.on{color:var(--acc)}
     </div>
   </section>
 
-  <section id="devices" class="tab"><div class="card">🔌 حاسبة الأجهزة: الخطوة 3</div></section>
+  <section id="devices" class="tab">
+    <div class="card">
+      <h2>إضافة جهاز</h2>
+      <div class="label">اختر جهاز جاهز (القيم تقريبية وتقدر تعدّلها):</div>
+      <div class="chips" id="chips"></div>
+      <label>اسم الجهاز <input id="d_name" type="text"></label>
+      <div class="two">
+        <label>الاستطاعة (واط) <input id="d_w" type="number" min="0" inputmode="decimal"></label>
+        <label>ساعات/يوم <input id="d_h" type="number" step="0.1" min="0" max="24" inputmode="decimal"></label>
+      </div>
+      <label>العدد <input id="d_q" type="number" min="1" value="1" inputmode="numeric"></label>
+      <button class="btn" id="addD">إضافة الجهاز</button>
+    </div>
+
+    <div class="card" id="sumCard">
+      <h2>الملخص</h2>
+      <div class="grid" style="margin-bottom:0">
+        <div><div class="label">يومياً</div><div class="mid"><span id="sd">0</span> <small>kWh</small></div></div>
+        <div><div class="label">شهرياً</div><div class="mid"><span id="sm">0</span> <small>kWh</small></div></div>
+        <div><div class="label">التكلفة الشهرية</div><div class="mid"><span id="sc">--</span> <small>ل.س</small></div></div>
+        <div><div class="label">الحمل الكلي</div><div class="mid"><span id="sl">0</span> <small>واط</small></div></div>
+      </div>
+      <div class="sub" id="loadTxt"></div>
+    </div>
+
+    <div class="card">
+      <h2>الأجهزة (الأكثر استهلاكاً أولاً)</h2>
+      <div id="devList"></div>
+    </div>
+  </section>
 
   <section id="settings" class="tab">
     <div class="card">
@@ -115,6 +163,21 @@ nav button.on{color:var(--acc)}
 const DEFAULTS = { panels: 4, panelW: 550, bat: 5, inv: 3500, sun: 4, price: 0 };
 const SKEY = "wafir_settings";
 const RKEY = "wafir_readings";
+const DKEY = "wafir_devices";
+const PRESETS = [
+  { n: "براد", w: 150, h: 10 },
+  { n: "غسالة", w: 500, h: 1 },
+  { n: "سخان ماء", w: 2000, h: 1 },
+  { n: "مكيف", w: 1500, h: 6 },
+  { n: "تلفزيون", w: 100, h: 5 },
+  { n: "إضاءة LED", w: 10, h: 6 },
+  { n: "راوتر", w: 12, h: 24 },
+  { n: "مروحة", w: 60, h: 8 },
+  { n: "مكواة", w: 1200, h: 0.5 },
+  { n: "مضخة ماء", w: 750, h: 1 },
+  { n: "لابتوب", w: 60, h: 5 },
+  { n: "ميكروويف", w: 1200, h: 0.3 }
+];
 const $ = id => document.getElementById(id);
 const f = (n, d = 1) => (+n).toFixed(d);
 
@@ -124,13 +187,13 @@ function loadSettings() {
 }
 function saveSettings(s) { try { localStorage.setItem(SKEY, JSON.stringify(s)); } catch {} }
 
-function loadReadings() {
+function loadArr(key) {
   try {
-    const r = JSON.parse(localStorage.getItem(RKEY) || "[]");
+    const r = JSON.parse(localStorage.getItem(key) || "[]");
     return Array.isArray(r) ? r : [];
   } catch { return []; }
 }
-function saveReadings(r) { try { localStorage.setItem(RKEY, JSON.stringify(r)); } catch {} }
+function saveArr(key, r) { try { localStorage.setItem(key, JSON.stringify(r)); } catch {} }
 
 function todayStr() { return new Date().toLocaleDateString("en-CA"); }
 
@@ -139,9 +202,8 @@ function daysBetween(a, b) {
   return Math.max(d, 1);
 }
 
-// يرجع القراءات مرتبة مع الفروقات
 function computeIntervals() {
-  const sorted = loadReadings().slice().sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = loadArr(RKEY).slice().sort((a, b) => a.date.localeCompare(b.date));
   return sorted.map((r, i) => {
     if (i === 0) return { ...r, delta: null, days: null, daily: null };
     const p = sorted[i - 1];
@@ -149,6 +211,18 @@ function computeIntervals() {
     const days = daysBetween(p.date, r.date);
     return { ...r, delta, days, daily: delta / days };
   });
+}
+
+function devicesStats() {
+  const s = loadSettings();
+  const list = loadArr(DKEY).map(d => {
+    const daily = (d.w * d.q * d.h) / 1000;
+    return { ...d, daily, load: d.w * d.q };
+  });
+  const totalDaily = list.reduce((a, d) => a + d.daily, 0);
+  const totalLoad = list.reduce((a, d) => a + d.load, 0);
+  list.sort((a, b) => b.daily - a.daily);
+  return { s, list, totalDaily, totalLoad };
 }
 
 function renderHome() {
@@ -185,6 +259,16 @@ function renderHome() {
     $("coverBar").style.width = "0";
     $("coverTxt").textContent = "سجّل قراءتين على الأقل لنحسب استهلاكك";
   }
+
+  const ds = devicesStats();
+  if (ds.list.length) {
+    $("devDaily").textContent = f(ds.totalDaily, 2);
+    const c = ds.totalDaily > 0 ? Math.min(gen / ds.totalDaily * 100, 100) : 100;
+    $("devTxt").textContent = "ألواحك بتغطي حوالي " + f(c, 0) + "% من استهلاك أجهزتك";
+  } else {
+    $("devDaily").textContent = "--";
+    $("devTxt").textContent = "أضف أجهزتك من تبويب الأجهزة";
+  }
 }
 
 function renderList() {
@@ -213,6 +297,80 @@ function renderList() {
   });
 }
 
+function renderDevices() {
+  const ds = devicesStats();
+  const s = ds.s;
+  const box = $("devList");
+  box.innerHTML = "";
+
+  $("sd").textContent = f(ds.totalDaily, 2);
+  $("sm").textContent = f(ds.totalDaily * 30, 0);
+  $("sc").textContent = s.price > 0 ? Math.round(ds.totalDaily * 30 * s.price).toLocaleString("ar-SY") : "--";
+  $("sl").textContent = Math.round(ds.totalLoad);
+
+  const lt = $("loadTxt");
+  if (!ds.list.length) {
+    lt.textContent = "";
+    lt.className = "sub";
+  } else if (s.inv > 0 && ds.totalLoad > s.inv) {
+    lt.className = "sub warn";
+    lt.textContent = "تنبيه: لو شغّلت كل الأجهزة مع بعض بتتجاوز قدرة الإنفرتر (" + s.inv + " واط). لا تشغّل الأجهزة الثقيلة بنفس الوقت.";
+  } else {
+    lt.className = "sub okc";
+    lt.textContent = "تشغيل كل الأجهزة مع بعض ضمن قدرة الإنفرتر (" + s.inv + " واط) ✅";
+  }
+
+  if (!ds.list.length) {
+    box.innerHTML = '<div class="empty">ما في أجهزة بعد، اختر جهاز من فوق 👆</div>';
+    return;
+  }
+
+  const max = ds.list[0].daily || 1;
+  ds.list.forEach(d => {
+    const el = document.createElement("div");
+    el.className = "dev";
+
+    const top = document.createElement("div");
+    top.className = "top";
+    const left = document.createElement("div");
+    const nm = document.createElement("div");
+    nm.className = "nm";
+    nm.textContent = d.n + (d.q > 1 ? " × " + d.q : "");
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    const share = ds.totalDaily > 0 ? (d.daily / ds.totalDaily * 100) : 0;
+    let costTxt = "";
+    if (s.price > 0) costTxt = " | " + Math.round(d.daily * 30 * s.price).toLocaleString("ar-SY") + " ل.س/شهر";
+    meta.textContent = d.w + " واط × " + d.h + " ساعة = " + f(d.daily, 2) + " kWh/يوم" + costTxt;
+    left.appendChild(nm);
+    left.appendChild(meta);
+
+    const right = document.createElement("div");
+    const pct = document.createElement("span");
+    pct.className = "pct";
+    pct.textContent = f(share, 0) + "% ";
+    const del = document.createElement("button");
+    del.className = "del";
+    del.dataset.id = d.id;
+    del.textContent = "🗑";
+    right.appendChild(pct);
+    right.appendChild(del);
+
+    top.appendChild(left);
+    top.appendChild(right);
+
+    const bar = document.createElement("div");
+    bar.className = "bar sm";
+    const fill = document.createElement("div");
+    fill.style.width = (d.daily / max * 100) + "%";
+    bar.appendChild(fill);
+
+    el.appendChild(top);
+    el.appendChild(bar);
+    box.appendChild(el);
+  });
+}
+
 function renderSettings() {
   const s = loadSettings();
   $("s_panels").value = s.panels;
@@ -223,7 +381,21 @@ function renderSettings() {
   $("s_price").value = s.price;
 }
 
-function renderAll() { renderHome(); renderList(); renderSettings(); }
+function renderAll() { renderHome(); renderList(); renderDevices(); renderSettings(); }
+
+// الأزرار الجاهزة
+PRESETS.forEach(p => {
+  const b = document.createElement("button");
+  b.className = "chip";
+  b.textContent = p.n;
+  b.onclick = () => {
+    $("d_name").value = p.n;
+    $("d_w").value = p.w;
+    $("d_h").value = p.h;
+    $("d_q").value = 1;
+  };
+  $("chips").appendChild(b);
+});
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -243,9 +415,9 @@ $("addR").onclick = () => {
   const date = $("r_date").value || todayStr();
   const value = parseFloat($("r_val").value);
   if (isNaN(value) || value < 0) { alert("اكتب رقم قراءة صحيح"); return; }
-  const list = loadReadings();
+  const list = loadArr(RKEY);
   list.push({ id: Date.now().toString(36), date: date, value: value });
-  saveReadings(list);
+  saveArr(RKEY, list);
   $("r_val").value = "";
   renderAll();
 };
@@ -254,7 +426,33 @@ $("list").onclick = e => {
   const btn = e.target.closest(".del");
   if (!btn) return;
   if (!confirm("حذف هذه القراءة؟")) return;
-  saveReadings(loadReadings().filter(r => r.id !== btn.dataset.id));
+  saveArr(RKEY, loadArr(RKEY).filter(r => r.id !== btn.dataset.id));
+  renderAll();
+};
+
+$("addD").onclick = () => {
+  const n = $("d_name").value.trim();
+  const w = parseFloat($("d_w").value);
+  const h = parseFloat($("d_h").value);
+  const q = parseInt($("d_q").value) || 1;
+  if (!n) { alert("اكتب اسم الجهاز"); return; }
+  if (isNaN(w) || w <= 0) { alert("اكتب الاستطاعة بالواط"); return; }
+  if (isNaN(h) || h <= 0 || h > 24) { alert("ساعات التشغيل لازم تكون بين 0 و 24"); return; }
+  const list = loadArr(DKEY);
+  list.push({ id: Date.now().toString(36), n: n, w: w, h: h, q: Math.max(q, 1) });
+  saveArr(DKEY, list);
+  $("d_name").value = "";
+  $("d_w").value = "";
+  $("d_h").value = "";
+  $("d_q").value = 1;
+  renderAll();
+};
+
+$("devList").onclick = e => {
+  const btn = e.target.closest(".del");
+  if (!btn) return;
+  if (!confirm("حذف هذا الجهاز؟")) return;
+  saveArr(DKEY, loadArr(DKEY).filter(d => d.id !== btn.dataset.id));
   renderAll();
 };
 
