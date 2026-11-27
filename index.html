@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0f1115">
 <title>وفّر</title>
 <style>
-:root{--bg:#0f1115;--card:#1a1d24;--text:#f2f4f8;--mut:#8b93a3;--acc:#f5c542;--acc2:#3ddc97}
+:root{--bg:#0f1115;--card:#1a1d24;--text:#f2f4f8;--mut:#8b93a3;--acc:#f5c542;--acc2:#3ddc97;--red:#ff6b6b}
 *{box-sizing:border-box;margin:0;font-family:system-ui,"Segoe UI",Tahoma,sans-serif}
 body{background:var(--bg);color:var(--text);padding-bottom:84px}
 header{display:flex;justify-content:space-between;align-items:center;padding:18px 16px 6px}
@@ -21,16 +21,26 @@ main{padding:10px 16px}
 .mid{font-size:26px;font-weight:700;color:var(--acc2)}
 small{font-size:13px;color:var(--mut);font-weight:400}
 .sub{color:var(--mut);font-size:12px;margin-top:6px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .grid .card{margin:0}
 h2{font-size:17px;margin-bottom:12px}
 label{display:block;color:var(--mut);font-size:13px;margin-bottom:12px}
 input{width:100%;margin-top:6px;padding:12px;border-radius:10px;border:1px solid #2c313c;background:#0f1115;color:var(--text);font-size:16px}
-#save{width:100%;padding:14px;border:0;border-radius:12px;background:var(--acc);color:#111;font-size:16px;font-weight:700}
+.btn{width:100%;padding:14px;border:0;border-radius:12px;background:var(--acc);color:#111;font-size:16px;font-weight:700}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#14171d;border-top:1px solid #232834;padding:8px 0 12px}
 nav button{flex:1;background:none;border:0;color:var(--mut);font-size:20px;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav button span{font-size:11px}
 nav button.on{color:var(--acc)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #262b36}
+.row:last-child{border-bottom:0}
+.row .d{font-size:13px;color:var(--mut)}
+.row .v{font-size:17px;font-weight:700}
+.row .x{font-size:13px;color:var(--acc2);margin-top:2px}
+.row .x.bad{color:var(--red)}
+.del{background:none;border:0;color:var(--red);font-size:18px;padding:6px}
+.empty{color:var(--mut);font-size:14px;text-align:center;padding:14px 0}
+.bar{height:10px;border-radius:6px;background:#262b36;overflow:hidden;margin-top:10px}
+.bar>div{height:100%;background:var(--acc2);width:0}
 </style>
 </head>
 <body>
@@ -43,6 +53,19 @@ nav button.on{color:var(--acc)}
       <div class="big"><span id="gen">0</span> <small>كيلوواط ساعة</small></div>
       <div class="sub">بناءً على قدرة الألواح وساعات الشمس</div>
     </div>
+
+    <div class="card">
+      <div class="label">متوسط استهلاكك اليومي</div>
+      <div class="mid"><span id="avg">--</span> <small>كيلوواط ساعة / يوم</small></div>
+      <div class="bar"><div id="coverBar"></div></div>
+      <div class="sub" id="coverTxt">سجّل قراءتين على الأقل لنحسب استهلاكك</div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><div class="label">تقدير الشهر</div><div class="mid"><span id="month">--</span> <small>kWh</small></div></div>
+      <div class="card"><div class="label">التكلفة التقديرية</div><div class="mid"><span id="cost">--</span> <small>ل.س</small></div></div>
+    </div>
+
     <div class="grid">
       <div class="card"><div class="label">سعة البطارية</div><div class="mid"><span id="bat">0</span> <small>kWh</small></div></div>
       <div class="card"><div class="label">مدة التشغيل (حمل 500 واط)</div><div class="mid"><span id="hours">0</span> <small>ساعة</small></div></div>
@@ -51,7 +74,19 @@ nav button.on{color:var(--acc)}
     </div>
   </section>
 
-  <section id="readings" class="tab"><div class="card">📅 قراءات العداد: الخطوة 2</div></section>
+  <section id="readings" class="tab">
+    <div class="card">
+      <h2>قراءة جديدة</h2>
+      <label>التاريخ <input id="r_date" type="date"></label>
+      <label>قراءة العداد (كيلوواط ساعة) <input id="r_val" type="number" step="0.1" min="0" inputmode="decimal"></label>
+      <button class="btn" id="addR">إضافة القراءة</button>
+    </div>
+    <div class="card">
+      <h2>السجل</h2>
+      <div id="list"></div>
+    </div>
+  </section>
+
   <section id="devices" class="tab"><div class="card">🔌 حاسبة الأجهزة: الخطوة 3</div></section>
 
   <section id="settings" class="tab">
@@ -62,7 +97,9 @@ nav button.on{color:var(--acc)}
       <label>سعة البطارية (kWh) <input id="s_bat" type="number" step="0.1" min="0"></label>
       <label>قدرة الإنفرتر (واط) <input id="s_inv" type="number" min="0"></label>
       <label>ساعات الشمس الفعالة يومياً <input id="s_sun" type="number" step="0.1" min="0"></label>
-      <button id="save">حفظ</button>
+      <h2 style="margin-top:8px">التعرفة</h2>
+      <label>سعر الكيلوواط ساعة (ل.س) <input id="s_price" type="number" step="any" min="0" inputmode="decimal"></label>
+      <button class="btn" id="save">حفظ</button>
     </div>
   </section>
 </main>
@@ -75,50 +112,155 @@ nav button.on{color:var(--acc)}
 </nav>
 
 <script>
-const DEFAULTS = { panels: 4, panelW: 550, bat: 5, inv: 3500, sun: 4 };
-const KEY = "wafir_settings";
+const DEFAULTS = { panels: 4, panelW: 550, bat: 5, inv: 3500, sun: 4, price: 0 };
+const SKEY = "wafir_settings";
+const RKEY = "wafir_readings";
+const $ = id => document.getElementById(id);
+const f = (n, d = 1) => (+n).toFixed(d);
 
-function load() {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; }
+function loadSettings() {
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SKEY) || "{}") }; }
   catch { return { ...DEFAULTS }; }
 }
-function save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} }
+function saveSettings(s) { try { localStorage.setItem(SKEY, JSON.stringify(s)); } catch {} }
 
-function render() {
-  const s = load();
-  const pv = s.panels * s.panelW;
-  const gen = (pv * s.sun * 0.8) / 1000; // كفاءة 80%
-  const usable = s.bat * 0.8; // عمق تفريغ 80%
-  const hours = usable * 1000 / 500;
-  const f = (n, d = 1) => (+n).toFixed(d);
-  document.getElementById("gen").textContent = f(gen);
-  document.getElementById("bat").textContent = f(s.bat);
-  document.getElementById("hours").textContent = f(hours);
-  document.getElementById("inv").textContent = s.inv;
-  document.getElementById("pv").textContent = pv;
-  document.getElementById("s_panels").value = s.panels;
-  document.getElementById("s_panelW").value = s.panelW;
-  document.getElementById("s_bat").value = s.bat;
-  document.getElementById("s_inv").value = s.inv;
-  document.getElementById("s_sun").value = s.sun;
+function loadReadings() {
+  try {
+    const r = JSON.parse(localStorage.getItem(RKEY) || "[]");
+    return Array.isArray(r) ? r : [];
+  } catch { return []; }
 }
+function saveReadings(r) { try { localStorage.setItem(RKEY, JSON.stringify(r)); } catch {} }
+
+function todayStr() { return new Date().toLocaleDateString("en-CA"); }
+
+function daysBetween(a, b) {
+  const d = Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+  return Math.max(d, 1);
+}
+
+// يرجع القراءات مرتبة مع الفروقات
+function computeIntervals() {
+  const sorted = loadReadings().slice().sort((a, b) => a.date.localeCompare(b.date));
+  return sorted.map((r, i) => {
+    if (i === 0) return { ...r, delta: null, days: null, daily: null };
+    const p = sorted[i - 1];
+    const delta = r.value - p.value;
+    const days = daysBetween(p.date, r.date);
+    return { ...r, delta, days, daily: delta / days };
+  });
+}
+
+function renderHome() {
+  const s = loadSettings();
+  const pv = s.panels * s.panelW;
+  const gen = (pv * s.sun * 0.8) / 1000;
+  const hours = (s.bat * 0.8 * 1000) / 500;
+
+  $("gen").textContent = f(gen);
+  $("bat").textContent = f(s.bat);
+  $("hours").textContent = f(hours);
+  $("inv").textContent = s.inv;
+  $("pv").textContent = pv;
+
+  const valid = computeIntervals().filter(x => x.delta !== null && x.delta >= 0);
+  const totalDelta = valid.reduce((a, x) => a + x.delta, 0);
+  const totalDays = valid.reduce((a, x) => a + x.days, 0);
+
+  if (totalDays > 0) {
+    const avg = totalDelta / totalDays;
+    const month = avg * 30;
+    $("avg").textContent = f(avg, 2);
+    $("month").textContent = f(month, 0);
+    $("cost").textContent = s.price > 0 ? Math.round(month * s.price).toLocaleString("ar-SY") : "--";
+    const cover = avg > 0 ? Math.min(gen / avg * 100, 100) : 100;
+    $("coverBar").style.width = cover + "%";
+    $("coverTxt").textContent = avg > 0
+      ? "ألواحك قادرة على تغطية حوالي " + f(cover, 0) + "% من استهلاكك اليومي"
+      : "لا يوجد استهلاك مسجّل";
+  } else {
+    $("avg").textContent = "--";
+    $("month").textContent = "--";
+    $("cost").textContent = "--";
+    $("coverBar").style.width = "0";
+    $("coverTxt").textContent = "سجّل قراءتين على الأقل لنحسب استهلاكك";
+  }
+}
+
+function renderList() {
+  const items = computeIntervals().reverse();
+  const box = $("list");
+  box.innerHTML = "";
+  if (!items.length) {
+    box.innerHTML = '<div class="empty">ما في قراءات بعد، أضف أول قراءة 👆</div>';
+    return;
+  }
+  items.forEach(r => {
+    const row = document.createElement("div");
+    row.className = "row";
+    let extra = "";
+    if (r.delta === null) {
+      extra = '<div class="x">قراءة البداية</div>';
+    } else if (r.delta < 0) {
+      extra = '<div class="x bad">القراءة أقل من السابقة، تأكد من الرقم</div>';
+    } else {
+      extra = '<div class="x">+' + f(r.delta) + " kWh خلال " + r.days + " يوم (" + f(r.daily, 2) + " / يوم)</div>";
+    }
+    row.innerHTML =
+      "<div><div class=\"d\">" + r.date + "</div><div class=\"v\">" + f(r.value) + " kWh</div>" + extra + "</div>" +
+      '<button class="del" data-id="' + r.id + '">🗑</button>';
+    box.appendChild(row);
+  });
+}
+
+function renderSettings() {
+  const s = loadSettings();
+  $("s_panels").value = s.panels;
+  $("s_panelW").value = s.panelW;
+  $("s_bat").value = s.bat;
+  $("s_inv").value = s.inv;
+  $("s_sun").value = s.sun;
+  $("s_price").value = s.price;
+}
+
+function renderAll() { renderHome(); renderList(); renderSettings(); }
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll("nav button").forEach(x => x.classList.remove("on"));
-  document.getElementById(b.dataset.tab).classList.add("active");
+  $(b.dataset.tab).classList.add("active");
   b.classList.add("on");
 });
 
-document.getElementById("save").onclick = () => {
-  const v = id => parseFloat(document.getElementById(id).value) || 0;
-  save({ panels: v("s_panels"), panelW: v("s_panelW"), bat: v("s_bat"), inv: v("s_inv"), sun: v("s_sun") });
-  render();
+$("save").onclick = () => {
+  const v = id => parseFloat($(id).value) || 0;
+  saveSettings({ panels: v("s_panels"), panelW: v("s_panelW"), bat: v("s_bat"), inv: v("s_inv"), sun: v("s_sun"), price: v("s_price") });
+  renderAll();
   document.querySelector('nav [data-tab="home"]').click();
 };
 
-document.getElementById("today").textContent = new Date().toLocaleDateString("ar-SY", { weekday: "long", day: "numeric", month: "long" });
-render();
+$("addR").onclick = () => {
+  const date = $("r_date").value || todayStr();
+  const value = parseFloat($("r_val").value);
+  if (isNaN(value) || value < 0) { alert("اكتب رقم قراءة صحيح"); return; }
+  const list = loadReadings();
+  list.push({ id: Date.now().toString(36), date: date, value: value });
+  saveReadings(list);
+  $("r_val").value = "";
+  renderAll();
+};
+
+$("list").onclick = e => {
+  const btn = e.target.closest(".del");
+  if (!btn) return;
+  if (!confirm("حذف هذه القراءة؟")) return;
+  saveReadings(loadReadings().filter(r => r.id !== btn.dataset.id));
+  renderAll();
+};
+
+$("today").textContent = new Date().toLocaleDateString("ar-SY", { weekday: "long", day: "numeric", month: "long" });
+$("r_date").value = todayStr();
+renderAll();
 </script>
 </body>
 </html>
